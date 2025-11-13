@@ -1,0 +1,17 @@
+fastapi
+uvicorn[standard]
+motor
+beanie
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+pydantic
+httpx
+celery[redis]
+redis
+cryptography
+groq
+pydantic_settings
+argon2-cffi
+authlib
+itsdangerous

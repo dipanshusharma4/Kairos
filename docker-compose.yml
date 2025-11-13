@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: ./Backend
+    container_name: wellness-backend
+    ports:
+      - "8081:8081"
+    env_file:
+      - ./Backend/app/.env
+    restart: always
+
+  frontend:
+    build:
+      context: ./Frontend/kairos-web
+    container_name: wellness-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_URL: "http://backend:8081"
+      NEXT_PUBLIC_WS_URL: "ws://backend:8081"
+    restart: always
