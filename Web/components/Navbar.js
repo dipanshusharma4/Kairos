@@ -77,7 +77,7 @@ export default function Navbar() {
           className="z-20 flex items-center gap-3 text-[#a7ebf2] text-2xl font-bold tracking-wider whitespace-nowrap"
         >
           <Image
-            src={"/logo.png"}
+            src={"/logo.svg"}
             width={40}
             height={40}
             alt="KAIROS logo"
