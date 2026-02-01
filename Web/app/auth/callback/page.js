@@ -22,7 +22,7 @@ function CallbackContent() {
             window.dispatchEvent(new Event('storage'));
 
             // Redirect to the main application area
-            router.push('/chatbot');
+            router.push('/dashboard');
         } else {
             // Handle error or missing token
             console.error("No token received in callback");
