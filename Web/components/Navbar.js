@@ -42,7 +42,7 @@ export default function Navbar() {
     const aboutLink = { href: "/about", label: "About" };
     const signupLink = { href: "/signup", label: "Signup" };
     const loginLink = { href: "/login", label: "Login" };
-    const chatbotLink = { href: "/chatbot", label: "Chatbot" };
+    const chatbotLink = { href: "/chatbot", label: "W Buddy" };
     const dashboardLink = { href: "/dashboard", label: "Dashboard" };
 
     switch (pathname) {

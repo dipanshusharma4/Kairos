@@ -498,7 +498,9 @@ export default function Dashboard() {
           </div>
           <h3 className="text-xl font-bold text-white mb-2">Mood Tracker</h3>
           <p className="text-[#91d7df] text-sm mb-4">
-            {stats.mood ? `You're feeling ${stats.mood} today!` : "How are you feeling today?"}
+            {stats.mood ? `You're feeling ${
+              { '😢': 'Sad', '😐': 'Neutral', '🙂': 'Good', '😄': 'Happy', '🤩': 'Excited' }[stats.mood] || stats.mood
+            } today!` : "How are you feeling today?"}
           </p>
           <div className="flex justify-between gap-2 mt-2">
             {['😢', '😐', '🙂', '😄', '🤩'].map((emoji, idx) => (
