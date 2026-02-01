@@ -24,13 +24,30 @@ export async function GET(request) {
         }).sort({ createdAt: -1 });
 
         // 2. Get Weekly Activity Progress (Simple goal: 10 activities/week)
-        const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
-        const weeklyActivitiesCount = await Activity.countDocuments({
+        // 2. Get Weekly Activity Chart Data
+        const today = new Date();
+        const startOfWeek = new Date(today);
+        startOfWeek.setDate(today.getDate() - today.getDay()); // Sunday as start
+        startOfWeek.setHours(0, 0, 0, 0);
+
+        const weeklyActivities = await Activity.find({
             userId,
             date: { $gte: startOfWeek }
         });
-        const weeklyGoal = 10;
-        const progressPercentage = Math.min(Math.round((weeklyActivitiesCount / weeklyGoal) * 100), 100);
+
+        // Initialize 7 days with 0 minutes
+        const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+        const weeklyData = days.map(day => ({ day, minutes: 0 }));
+
+        weeklyActivities.forEach(activity => {
+            const dayIndex = new Date(activity.date).getDay();
+            weeklyData[dayIndex].minutes += activity.duration;
+        });
+
+        // Calculate progress based on Duration Goal (e.g. 150 mins / week recommended)
+        const totalWeeklyMinutes = weeklyData.reduce((acc, d) => acc + d.minutes, 0);
+        const weeklyGoalMinutes = 150;
+        const progressPercentage = Math.min(Math.round((totalWeeklyMinutes / weeklyGoalMinutes) * 100), 100);
 
         // 3. Calculate Average Sleep (Last 7 days)
         const sevenDaysAgo = new Date();
@@ -64,7 +81,8 @@ export async function GET(request) {
         return NextResponse.json({
             mood: todaysMood ? todaysMood.mood : null,
             progress: progressPercentage,
-            completedGoals: weeklyActivitiesCount,
+            completedGoals: totalWeeklyMinutes, // Sending minutes instead of count
+            weeklyData: weeklyData,
             sleep: avgSleepStr,
             sleepQuality: sleepQuality,
             recentActivities: recentActivities.map(a => {

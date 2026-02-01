@@ -38,7 +38,9 @@ export default function Dashboard() {
     completedGoals: 0,
     sleep: "0h 0m",
     sleepQuality: "Unknown",
-    recentActivities: []
+    sleepQuality: "Unknown",
+    recentActivities: [],
+    weeklyData: []
   });
   const [isLoading, setIsLoading] = useState(true);
 
@@ -520,13 +522,40 @@ export default function Dashboard() {
             <div className="bg-purple-500/20 p-3 rounded-lg">
               <FaChartLine className="text-[#a7ebf2] text-2xl" />
             </div>
+            <span className="text-xs font-semibold bg-[#a7ebf2] text-[#023859] px-2 py-1 rounded">
+              {stats.progress > 100 ? 100 : stats.progress}% Goal
+            </span>
           </div>
-          <h3 className="text-xl font-bold text-white mb-2">Weekly Progress</h3>
-          <p className="text-[#91d7df] text-sm mb-4">You've completed {stats.completedGoals} wellness acts!</p>
-          <div className="w-full bg-gray-700/50 rounded-full h-3 mb-2 overflow-hidden">
-            <div className="bg-gradient-to-r from-[#a7ebf2] to-[#60c0ce] h-3 rounded-full transition-all duration-1000 ease-out" style={{ width: `${stats.progress}%` }}></div>
+          <h3 className="text-xl font-bold text-white mb-1">Weekly Activity</h3>
+          <p className="text-[#91d7df] text-sm mb-4">
+            {stats.completedGoals ? `${Math.floor(stats.completedGoals / 60)}h ${stats.completedGoals % 60}m` : '0m'} total this week
+          </p>
+
+          <div className="flex items-end justify-between gap-1 h-28 w-full mt-auto">
+            {stats.weeklyData && stats.weeklyData.length > 0 ? (
+              stats.weeklyData.map((d, i) => {
+                const maxVal = Math.max(...stats.weeklyData.map(item => item.minutes), 60);
+                const heightPercentage = Math.max((d.minutes / maxVal) * 100, 4); // Min 4% height for visibility
+
+                return (
+                  <div key={i} className="flex flex-col items-center gap-2 flex-1 group relative">
+                    {/* Tooltip */}
+                    <div className="absolute -top-10 bg-white text-[#023859] text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap font-bold pointer-events-none z-10 shadow-lg">
+                      {d.minutes} mins
+                    </div>
+
+                    <div
+                      className={`w-full max-w-[14px] md:max-w-[24px] rounded-t-md transition-all duration-700 ease-out ${d.minutes > 0 ? 'bg-gradient-to-t from-[#a7ebf2] to-[#60c0ce] hover:to-white' : 'bg-white/5'}`}
+                      style={{ height: `${heightPercentage}%` }}
+                    ></div>
+                    <span className="text-[10px] uppercase font-bold text-gray-400">{d.day}</span>
+                  </div>
+                )
+              })
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs animate-pulse">Loading chart...</div>
+            )}
           </div>
-          <span className="text-xs text-[#a7ebf2]">{stats.progress}% to weekly goal</span>
         </div>
 
         {/* Sleep Tracker */}
