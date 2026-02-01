@@ -1,2 +1,0 @@
-# Kairos Backend Application Package
-
