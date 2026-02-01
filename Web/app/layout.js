@@ -23,12 +23,12 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}
       >
         <SessionWrapper>
 
         <Navbar />
-        <div className="min-h-[85.9vh]">{children}</div>
+        <div className="flex-1 flex flex-col">{children}</div>
         <Footer />
         </SessionWrapper>
       </body>

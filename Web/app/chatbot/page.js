@@ -58,12 +58,6 @@ export default function chatbot() {
       if (res.ok) {
         const data = await res.json();
         setConversations(data);
-
-        // Always default to New Chat on initial load, even if history exists
-        if (!currentConversationId) {
-          handleNewChat();
-          setIsLoading(false);
-        }
       }
     } catch (error) {
       console.error("Failed to fetch conversations:", error);
@@ -152,6 +146,11 @@ export default function chatbot() {
       router.push("/login");
     } else if (status === "authenticated") {
       fetchConversations();
+      if (!currentConversationId) {
+        // Ensure we start in a clean state if no conversation is selected
+        handleNewChat();
+        setIsLoading(false); 
+      }
     }
   }, [status, router]);
 
@@ -159,8 +158,120 @@ export default function chatbot() {
     messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages, isLoading]);
 
-  const handleSend = async () => {
-    if (!chatInput.trim()) return;
+  // Voice Chat State
+  const [isListening, setIsListening] = useState(false);
+  const [voiceActive, setVoiceActive] = useState(false); // UI State
+  const voiceActiveRef = useRef(false); // Ref for callbacks
+
+  // Sync Ref with State
+  useEffect(() => {
+    voiceActiveRef.current = voiceActive;
+  }, [voiceActive]);
+
+  // Speech Recognition
+  const startListening = () => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      alert("Your browser does not support voice recognition. Try Chrome or Edge.");
+      return;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'en-US'; 
+
+    recognition.onstart = () => {
+      setIsListening(true);
+      setVoiceActive(true); // Update State
+      voiceActiveRef.current = true; // Update Ref
+    };
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      setChatInput(transcript);
+      handleSend(transcript, true); 
+    };
+
+    recognition.onerror = (event) => {
+      console.error("Speech recognition error", event.error);
+      setIsListening(false);
+      // Don't disable voice mode on simple no-speech error, allow user to click again?
+      // Or maybe we should? For now, keep it on so they can try again or we can auto-restart?
+      // Let's stick to safe defaults: if error, stop listing. User clicks again.
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognition.start();
+  };
+
+  const stopListening = () => {  
+    setIsListening(false);
+    setVoiceActive(false);
+    voiceActiveRef.current = false;
+    window.speechSynthesis.cancel(); // Stop speaking immediately
+  }
+
+
+  // Text to Speech
+  const speak = (text) => {
+    if (!('speechSynthesis' in window)) return;
+
+    // Clean text...
+    const cleanText = text
+      .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
+      .replace(/[*#]/g, '') 
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!cleanText) return;
+
+    window.speechSynthesis.cancel(); 
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.lang = "en-US";
+    utterance.rate = 1;
+    utterance.pitch = 1;
+
+    // Voice Selection
+    const voices = window.speechSynthesis.getVoices();
+    const englishVoices = voices.filter(voice => voice.lang.startsWith('en'));
+    const preferredVoice = englishVoices.find(v => v.name.includes("Google US English")) 
+                        || englishVoices.find(v => v.name.includes("Microsoft Zira"))
+                        || englishVoices.find(v => v.name.includes("Samantha")) 
+                        || englishVoices.find(v => v.lang === "en-US")
+                        || englishVoices[0];
+
+    if (preferredVoice) utterance.voice = preferredVoice;
+
+    // CONTINUOUS MODE: When bot finishes, start listening again if mode is active
+    utterance.onend = () => {
+      if (voiceActiveRef.current) {
+        startListening();
+      }
+    };
+
+    window.speechSynthesis.speak(utterance);
+  };
+  
+  // Ensure we cancel speech if we unmount or leave
+  useEffect(() => {
+    return () => {
+      window.speechSynthesis.cancel();
+    }
+  }, []);
+
+  const handleSend = async (manualInput = null, isVoice = false) => {
+    const textToSend = manualInput || chatInput; 
+    if (!textToSend.trim()) return;
+
+    // If this wasn't a voice action, ensure we don't speak back unless previously active? 
+    // Actually, usually if user types, bot texts. If user speaks, bot speaks.
+    if (!isVoice) setVoiceActive(false);
 
     let activeConvId = currentConversationId;
 
@@ -182,7 +293,7 @@ export default function chatbot() {
     }
 
     setIsLoading(true);
-    const userMessage = { sender: "You", text: chatInput };
+    const userMessage = { sender: "You", text: textToSend };
     // Optimistic UI update
     const updatedMessages = [...chatMessages, userMessage];
     setChatMessages(updatedMessages);
@@ -211,28 +322,37 @@ export default function chatbot() {
             text: "Whoa, we're chatting a bit too fast! ⚡️\n\nI need a quick breather (about 30 seconds) to cool down my circuits. Thanks for being patient! 🌿"
           };
           setChatMessages((prev) => [...prev, rateLimitMsg]);
+          if (isVoice || voiceActive) speak("Whoa, chatting too fast. I need a breather.");
           return;
         }
         throw new Error("Network response was not ok");
       }
 
       const data = await response.json();
-      const botResponse = { sender: "Kairos", text: data.text || "Sorry, I couldn't understand that." };
+      const botText = data.text || "Sorry, I couldn't understand that.";
+      const botResponse = { sender: "Kairos", text: botText };
 
       setChatMessages((prev) => [...prev, botResponse]);
+      
+      // Speak response if voice active
+      if (isVoice || voiceActive) {
+        speak(botText);
+      }
 
       // Refresh conversations list (to update 'updatedAt' order or titles)
       fetchConversations();
 
     } catch (error) {
       console.error("Chat API Error:", error);
+      const errMsg = "Sorry, I'm having trouble connecting right now. Please try again.";
       setChatMessages((prev) => [
         ...prev,
         {
           sender: "Kairos",
-          text: "Sorry, I'm having trouble connecting right now. Please try again.",
+          text: errMsg,
         },
       ]);
+      if (isVoice || voiceActive) speak(errMsg);
     } finally {
       setIsLoading(false);
     }
@@ -243,6 +363,8 @@ export default function chatbot() {
     setChatMessages([]);
     setIsSidebarOpen(false);
     setIsHeaderDropdownOpen(false);
+    setVoiceActive(false);
+    window.speechSynthesis.cancel();
   };
 
   return (
@@ -453,20 +575,26 @@ export default function chatbot() {
               />
 
               <button
-                className={`px-3.5 rounded-full hover:bg-[#01295c] 
-                bg-[#011c40] cursor-pointer ${!isLoading ? "bg-[#011c40]" : "bg-gray-700"
-                  }`}
-                onClick={handleSend}
-                disabled={isLoading}
+                className={`px-3.5 rounded-full hover:bg-[#01295c] transition-all duration-300
+                ${isListening 
+                  ? "bg-red-500 animate-pulse text-white shadow-[0_0_15px_rgba(239,68,68,0.5)]" 
+                  : voiceActive 
+                    ? "bg-red-500/20 text-red-300 border border-red-500/50" 
+                    : "bg-[#011c40] text-white"
+                } 
+                ${isLoading ? "bg-gray-700 cursor-not-allowed" : "cursor-pointer"}`}
+                onClick={voiceActive ? stopListening : startListening}
+                disabled={isLoading && !voiceActive} 
+                title={voiceActive ? "Stop Voice Mode" : "Start Voice Chat"}
               >
-                <RiVoiceprintFill className="text-white text-xl" />
+                {voiceActive && !isListening ? <FaTrash className="text-sm" /> : <RiVoiceprintFill className="text-xl" />}
               </button>
 
               <button
                 className={`px-4 rounded-full hover:bg-[#01295c] 
                 bg-[#011c40] cursor-pointer ${!isLoading ? "bg-[#011c40]" : "bg-gray-700"
                   }`}
-                onClick={handleSend}
+                onClick={() => handleSend()}
                 disabled={isLoading}
               >
                 <IoSendSharp className="text-white" />

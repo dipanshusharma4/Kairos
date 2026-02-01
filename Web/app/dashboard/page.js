@@ -287,7 +287,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="w-full bg-gradient-to-br from-[#a7ebf2] via-[#86dae3] to-[#60c0ce] p-4 md:p-8 pb-10 font-sans relative overflow-x-hidden">
+    <div className="w-full bg-gradient-to-br from-[#a7ebf2] via-[#86dae3] to-[#60c0ce] p-4 md:p-8 pb-10 font-sans relative overflow-x-hidden flex-1">
 
       {/* Edit Activity Modal */}
       {isEditModalOpen && (
@@ -535,13 +535,13 @@ export default function Dashboard() {
             {stats.weeklyData && stats.weeklyData.length > 0 ? (
               stats.weeklyData.map((d, i) => {
                 const maxVal = Math.max(...stats.weeklyData.map(item => item.minutes), 60);
-                const heightPercentage = Math.max((d.minutes / maxVal) * 100, 4); // Min 4% height for visibility
+                const heightPercentage = Math.max((d.minutes / maxVal) * 85, 4); // Max 85% to fit label
 
                 return (
-                  <div key={i} className="flex flex-col items-center gap-2 flex-1 group relative">
+                  <div key={i} className="flex flex-col items-center justify-end gap-2 flex-1 h-full group relative">
                     {/* Tooltip */}
                     <div className="absolute -top-10 bg-white text-[#023859] text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap font-bold pointer-events-none z-10 shadow-lg">
-                      {d.minutes} mins
+                      {Math.floor(d.minutes / 60)}h {d.minutes % 60}m
                     </div>
 
                     <div
