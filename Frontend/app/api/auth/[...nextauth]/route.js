@@ -98,6 +98,9 @@ export const authoptions = {
         // You might need to update your session object with custom data here
         session.user.name = dbUser.username;
         session.user.id = dbUser._id.toString();
+        if (dbUser.image) {
+          session.user.image = dbUser.image;
+        }
       }
       return session;
     },

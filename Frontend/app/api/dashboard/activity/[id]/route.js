@@ -12,7 +12,7 @@ export async function DELETE(request, { params }) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const { id } = params;
+        const { id } = await params;
         await connectDB();
 
         const activity = await Activity.findOneAndDelete({
@@ -38,7 +38,7 @@ export async function PATCH(request, { params }) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const { id } = params;
+        const { id } = await params;
         const body = await request.json(); // { type, duration }
 
         await connectDB();

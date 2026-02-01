@@ -21,7 +21,7 @@ import { IoIosLogOut } from "react-icons/io";
 import { signOut } from "next-auth/react";
 
 export default function Dashboard() {
-  const { data: session, status } = useSession();
+  const { data: session, status, update } = useSession();
   const router = useRouter();
   const [greeting, setGreeting] = useState("");
 
@@ -108,6 +108,8 @@ export default function Dashboard() {
       if (res.ok) {
         const data = await res.json();
         setDisplayName(data.username);
+        // Update local session to reflect changes in Navbar immediately
+        await update({ name: data.username });
       }
     } catch (error) {
       console.error("Failed to update name", error);
@@ -142,7 +144,9 @@ export default function Dashboard() {
 
         if (!res.ok) {
           console.error("Failed request");
-          // Revert if needed, but for now we expect success
+        } else {
+          // Update local session
+          await update({ image: base64String });
         }
       } catch (error) {
         console.error("Failed to upload image", error);
@@ -281,7 +285,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#a7ebf2] via-[#86dae3] to-[#60c0ce] p-4 md:p-8 font-sans relative overflow-x-hidden">
+    <div className="w-full bg-gradient-to-br from-[#a7ebf2] via-[#86dae3] to-[#60c0ce] p-4 md:p-8 pb-10 font-sans relative overflow-x-hidden">
 
       {/* Edit Activity Modal */}
       {isEditModalOpen && (

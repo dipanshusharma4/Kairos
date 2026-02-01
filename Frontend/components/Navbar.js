@@ -70,7 +70,7 @@ export default function Navbar() {
   const isDashboard = pathname === "/dashboard";
 
   return (
-    <nav className="bg-[#011c40] py-4 pl-4 pr-2 shadow-md relative z-40">
+    <nav className="bg-[#011c40] py-4 pl-4 pr-2 shadow-md sticky top-0 z-50">
       <div className="mx-auto flex justify-between items-center">
         <Link
           href={session ? "/chatbot" : "/"}
