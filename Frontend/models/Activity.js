@@ -13,6 +13,7 @@ const ActivitySchema = new mongoose.Schema({
     duration: {
         type: Number, // in minutes (for sleep, it could be minutes total)
         required: true,
+        min: 0,
     },
     date: {
         type: Date,

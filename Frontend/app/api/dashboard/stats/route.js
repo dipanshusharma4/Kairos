@@ -43,29 +43,43 @@ export async function GET(request) {
         });
 
         let avgSleepStr = "0h 0m";
+        let sleepQuality = "Unknown";
         if (sleepLogs.length > 0) {
             const totalMinutes = sleepLogs.reduce((acc, log) => acc + log.duration, 0);
             const avgMinutes = totalMinutes / sleepLogs.length;
             const hours = Math.floor(avgMinutes / 60);
             const mins = Math.round(avgMinutes % 60);
             avgSleepStr = `${hours}h ${mins}m`;
+
+            if (avgMinutes < 360) sleepQuality = "Needs Improvement";
+            else if (avgMinutes < 420) sleepQuality = "Fair";
+            else if (avgMinutes < 540) sleepQuality = "Good";
+            else sleepQuality = "Excellent";
         }
 
-        // 4. Recent Activities (Limit 3)
+        // 4. Recent Activities (All)
         const recentActivities = await Activity.find({ userId })
-            .sort({ date: -1 })
-            .limit(3);
+            .sort({ date: -1 });
 
         return NextResponse.json({
             mood: todaysMood ? todaysMood.mood : null,
             progress: progressPercentage,
             completedGoals: weeklyActivitiesCount,
             sleep: avgSleepStr,
-            recentActivities: recentActivities.map(a => ({
-                title: a.type,
-                time: new Date(a.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                duration: a.duration >= 60 ? `${Math.floor(a.duration / 60)}h ${a.duration % 60}m` : `${a.duration} min`
-            }))
+            sleepQuality: sleepQuality,
+            recentActivities: recentActivities.map(a => {
+                const dateObj = new Date(a.date);
+                const isToday = dateObj.toDateString() === new Date().toDateString();
+                const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const dateStr = dateObj.toLocaleDateString([], { month: 'short', day: 'numeric' });
+
+                return {
+                    id: a._id,
+                    title: a.type,
+                    time: isToday ? timeStr : `${dateStr}, ${timeStr}`,
+                    duration: a.duration >= 60 ? `${Math.floor(a.duration / 60)}h ${a.duration % 60}m` : `${a.duration} min`
+                };
+            })
         });
 
     } catch (error) {

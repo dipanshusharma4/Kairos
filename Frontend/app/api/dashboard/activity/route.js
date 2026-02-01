@@ -14,8 +14,12 @@ export async function POST(request) {
         const { type, duration, date } = await request.json();
 
         // Minimal validation
-        if (!type || !duration) {
+        if (!type || duration === undefined || duration === null) {
             return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
+        }
+
+        if (Number(duration) < 0) {
+            return NextResponse.json({ error: 'Duration cannot be negative' }, { status: 400 });
         }
 
         await connectDB();

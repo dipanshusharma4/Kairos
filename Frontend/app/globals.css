@@ -1,15 +1,59 @@
 @import "tailwindcss";
 
-.hide-scrollbar {
-  /* Hide scrollbar for all browsers */
-  overflow: -moz-scrollbars-none;
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-  overflow-y: scroll;
+@layer components {
+  .hide-scrollbar {
+    /* Hide scrollbar for all browsers */
+    overflow: -moz-scrollbars-none;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+    overflow-y: scroll;
+  }
+
+  /* For Chrome, Safari, and Opera */
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Custom Scrollbar */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(167, 235, 242, 0.5); /* #a7ebf2 with opacity */
+    border-radius: 10px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(167, 235, 242, 0.8);
+  }
 }
 
-/* For Chrome, Safari, and Opera */
-.hide-scrollbar::-webkit-scrollbar {
-  display: none;
+@layer utilities {
+  .animate-fadeIn {
+    animation: fadeIn 0.5s ease-out forwards;
+  }
+  
+  .animate-slideUp {
+    animation: slideUp 0.5s ease-out forwards;
+  }
+
+  .delay-100 { animation-delay: 100ms; }
+  .delay-200 { animation-delay: 200ms; }
+  .delay-300 { animation-delay: 300ms; }
 }
 
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}

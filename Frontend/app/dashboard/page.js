@@ -13,7 +13,9 @@ import {
   FaBed,
   FaWalking,
   FaPen,
-  FaCheck
+  FaCheck,
+  FaTrash,
+  FaEdit
 } from "react-icons/fa";
 import { IoIosLogOut } from "react-icons/io";
 import { signOut } from "next-auth/react";
@@ -35,6 +37,7 @@ export default function Dashboard() {
     progress: 0,
     completedGoals: 0,
     sleep: "0h 0m",
+    sleepQuality: "Unknown",
     recentActivities: []
   });
   const [isLoading, setIsLoading] = useState(true);
@@ -42,10 +45,18 @@ export default function Dashboard() {
   // Modal State
   const [isCheckInOpen, setIsCheckInOpen] = useState(false);
   const [checkInData, setCheckInData] = useState({
-    sleepHours: "",
     activityType: "Meditation",
-    activityDuration: ""
+    activityDuration: "",
+    customActivityType: ""
   });
+  const [isCustomActivity, setIsCustomActivity] = useState(false);
+
+  const [isSleepLoggingOpen, setIsSleepLoggingOpen] = useState(false);
+  const [sleepInput, setSleepInput] = useState("");
+
+  // Edit Activity State
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editData, setEditData] = useState({ id: null, type: "", duration: "" });
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -146,6 +157,26 @@ export default function Dashboard() {
     setIsEditingName(true);
   };
 
+  const handleSleepLogSubmit = async () => {
+    if (!sleepInput || parseFloat(sleepInput) < 0) return;
+
+    try {
+      await fetch("/api/dashboard/activity", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "Sleep",
+          duration: parseFloat(sleepInput) * 60
+        })
+      });
+      setSleepInput("");
+      setIsSleepLoggingOpen(false);
+      fetchStats();
+    } catch (error) {
+      console.error("Failed to log sleep");
+    }
+  };
+
   const handleMoodSave = async (mood) => {
     // Optimistic updatte
     setStats(prev => ({ ...prev, mood }));
@@ -164,33 +195,85 @@ export default function Dashboard() {
   const handleCheckInSubmit = async (e) => {
     e.preventDefault();
 
-    // Save Sleep if provided
-    if (checkInData.sleepHours) {
-      await fetch("/api/dashboard/activity", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "Sleep",
-          duration: parseFloat(checkInData.sleepHours) * 60 // Convert hours to mins
-        })
-      });
-    }
+
 
     // Save Activity if provided
-    if (checkInData.activityDuration) {
-      await fetch("/api/dashboard/activity", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: checkInData.activityType,
-          duration: parseInt(checkInData.activityDuration)
-        })
-      });
+    if (checkInData.activityDuration && parseInt(checkInData.activityDuration) >= 0) {
+      const type = isCustomActivity ? checkInData.customActivityType : checkInData.activityType;
+
+      if (type) {
+        await fetch("/api/dashboard/activity", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: type,
+            duration: parseInt(checkInData.activityDuration)
+          })
+        });
+      }
     }
 
     setIsCheckInOpen(false);
-    setCheckInData({ sleepHours: "", activityType: "Meditation", activityDuration: "" });
+    setCheckInData({ activityType: "Meditation", activityDuration: "", customActivityType: "" });
+    setIsCustomActivity(false);
     fetchStats(); // Refresh dashboard
+  };
+
+  const handleDeleteActivity = async (id) => {
+    if (!confirm("Are you sure you want to delete this activity?")) return;
+
+    try {
+      const res = await fetch(`/api/dashboard/activity/${id}`, { method: "DELETE" });
+      if (res.ok) fetchStats();
+    } catch (error) {
+      console.error("Failed to delete activity", error);
+    }
+  };
+
+  const openEditModal = (activity) => {
+    // Extract numeric duration
+    const durationMatch = activity.duration.match(/(\d+)/);
+    const durationVal = durationMatch ? durationMatch[0] : "";
+
+    setEditData({
+      id: activity.id,
+      type: activity.title,
+      duration: durationVal // Approximation if mixed format, but usually we send minutes back or handle it. 
+      // Note: Endpoint sends formatted string, so we might need to rely on what we have or handle parsing better.
+      // Actually the endpoint sends formatted string. Best to user raw duration from backend, but we didn't add it.
+      // Let's assume user just re-enters it or we parse simple "15 min" or "1h 30m".
+      // For now, let's just let them type new duration.
+    });
+    // Re-parsing logic for UI convenience:
+    let mins = 0;
+    if (activity.duration.includes('h')) {
+      const parts = activity.duration.split(' ');
+      const h = parseInt(parts[0]) || 0;
+      const m = parseInt(parts[1]) || 0;
+      mins = h * 60 + m;
+    } else {
+      mins = parseInt(activity.duration) || 0;
+    }
+    setEditData({ id: activity.id, type: activity.title, duration: mins });
+    setIsEditModalOpen(true);
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await fetch(`/api/dashboard/activity/${editData.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: editData.type,
+          duration: parseInt(editData.duration)
+        })
+      });
+      setIsEditModalOpen(false);
+      fetchStats();
+    } catch (error) {
+      console.error("Failed to edit activity", error);
+    }
   };
 
   if (status === "loading" || isLoading) {
@@ -198,7 +281,52 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-[#a7ebf2] p-4 md:p-8 font-sans relative">
+    <div className="min-h-screen bg-gradient-to-br from-[#a7ebf2] via-[#86dae3] to-[#60c0ce] p-4 md:p-8 font-sans relative overflow-x-hidden">
+
+      {/* Edit Activity Modal */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#023859] rounded-xl shadow-2xl p-6 w-full max-w-md border border-[#a7ebf2]/20">
+            <h3 className="text-xl font-bold text-[#a7ebf2] mb-4">Edit Activity</h3>
+            <form onSubmit={handleEditSubmit} className="space-y-4">
+              <div>
+                <label className="block text-white text-sm mb-1">Activity Type</label>
+                <input
+                  type="text"
+                  value={editData.type}
+                  onChange={e => setEditData({ ...editData, type: e.target.value })}
+                  className="w-full bg-white/10 border border-white/20 rounded-lg p-2 text-white focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-white text-sm mb-1">Duration (minutes)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={editData.duration}
+                  onChange={e => setEditData({ ...editData, duration: e.target.value })}
+                  className="w-full bg-white/10 border border-white/20 rounded-lg p-2 text-white focus:outline-none"
+                />
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="flex-1 py-2 rounded-lg border border-white/20 text-gray-300 hover:bg-white/5 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2 rounded-lg bg-[#a7ebf2] text-[#023859] font-bold hover:bg-white transition-colors"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Check-in Modal Overlay */}
       {isCheckInOpen && (
@@ -207,37 +335,56 @@ export default function Dashboard() {
             <h3 className="text-2xl font-bold text-[#a7ebf2] mb-4">Daily Check-in</h3>
             <form onSubmit={handleCheckInSubmit} className="space-y-4">
 
-              <div>
-                <label className="block text-white text-sm mb-1">How many hours did you sleep?</label>
-                <input
-                  type="number"
-                  step="0.5"
-                  value={checkInData.sleepHours}
-                  onChange={e => setCheckInData({ ...checkInData, sleepHours: e.target.value })}
-                  className="w-full bg-white/10 border border-white/20 rounded-lg p-2 text-white placeholder-gray-400 focus:outline-none focus:border-[#a7ebf2]"
-                  placeholder="e.g. 7.5"
-                />
-              </div>
+
 
               <div>
-                <label className="block text-white text-sm mb-1">Did you move or meditate?</label>
+                <label className="block text-white text-sm mb-1">Did something meaningful today?</label>
                 <div className="flex gap-2">
-                  <select
-                    value={checkInData.activityType}
-                    onChange={e => setCheckInData({ ...checkInData, activityType: e.target.value })}
-                    className="bg-white/10 border border-white/20 rounded-lg p-2 text-white focus:outline-none flex-1"
-                  >
-                    <option value="Meditation" className="text-black">Meditation</option>
-                    <option value="Walking" className="text-black">Walking</option>
-                    <option value="Yoga" className="text-black">Yoga</option>
-                    <option value="Workout" className="text-black">Workout</option>
-                    <option value="Reading" className="text-black">Reading</option>
-                  </select>
+                  <div className="flex-1 flex flex-col gap-2">
+                    <select
+                      value={isCustomActivity ? "Other" : checkInData.activityType}
+                      onChange={e => {
+                        const val = e.target.value;
+                        if (val === "Other") {
+                          setIsCustomActivity(true);
+                          setCheckInData({ ...checkInData, activityType: "" });
+                        } else {
+                          setIsCustomActivity(false);
+                          setCheckInData({ ...checkInData, activityType: val });
+                        }
+                      }}
+                      className="w-full bg-white/10 border border-white/20 rounded-lg p-2 text-white focus:outline-none"
+                    >
+                      <option value="Meditation" className="text-black">Meditation</option>
+                      <option value="Walking" className="text-black">Walking</option>
+                      <option value="Yoga" className="text-black">Yoga</option>
+                      <option value="Workout" className="text-black">Workout</option>
+                      <option value="Reading" className="text-black">Reading</option>
+                      <option value="Other" className="text-black">Other (Type own)</option>
+                    </select>
+
+                    {isCustomActivity && (
+                      <input
+                        type="text"
+                        placeholder="Type activity name..."
+                        value={checkInData.customActivityType}
+                        onChange={(e) => setCheckInData({ ...checkInData, customActivityType: e.target.value })}
+                        className="w-full bg-white/10 border border-white/20 rounded-lg p-2 text-white focus:outline-none"
+                      />
+                    )}
+                  </div>
+
                   <input
                     type="number"
+                    min="0"
                     value={checkInData.activityDuration}
-                    onChange={e => setCheckInData({ ...checkInData, activityDuration: e.target.value })}
-                    className="w-24 bg-white/10 border border-white/20 rounded-lg p-2 text-white focus:outline-none"
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "" || parseFloat(val) >= 0) {
+                        setCheckInData({ ...checkInData, activityDuration: val });
+                      }
+                    }}
+                    className="w-24 h-[42px] bg-white/10 border border-white/20 rounded-lg p-2 text-white focus:outline-none"
                     placeholder="Mins"
                   />
                 </div>
@@ -264,15 +411,15 @@ export default function Dashboard() {
       )}
 
       {/* Header */}
-      <header className="flex justify-between items-center mb-8 bg-[#023859] p-4 rounded-xl shadow-lg text-[#a7ebf2]">
-        <div className="flex items-center gap-4">
+      <header className="flex justify-between items-center mb-8 bg-[#023859]/90 backdrop-blur-md p-5 rounded-2xl shadow-xl border border-white/10 text-[#a7ebf2] animate-fadeIn">
+        <div className="flex items-center gap-5">
           <div className="relative group cursor-pointer">
             <label htmlFor="avatar-upload" className="cursor-pointer">
-              <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-[#a7ebf2] bg-[#a7ebf2] flex items-center justify-center relative">
+              <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-[#a7ebf2] shadow-[0_0_10px_rgba(167,235,242,0.3)] bg-[#a7ebf2] flex items-center justify-center relative transition-transform transform group-hover:scale-105">
                 {displayImage ? (
                   <img src={displayImage} alt="Profile" className="w-full h-full object-cover" />
                 ) : (
-                  <FaUser className="text-[#023859] text-xl" />
+                  <FaUser className="text-[#023859] text-2xl" />
                 )}
 
                 {/* Overlay on hover */}
@@ -291,7 +438,7 @@ export default function Dashboard() {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold">{greeting}, </h1>
+              <h1 className="text-2xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#a7ebf2] to-white drop-shadow-sm">{greeting}, </h1>
 
               {isEditingName ? (
                 <div className="flex items-center gap-1">
@@ -299,33 +446,33 @@ export default function Dashboard() {
                     type="text"
                     value={tempName}
                     onChange={(e) => setTempName(e.target.value)}
-                    className="bg-white/10 border border-white/20 rounded px-2 py-0.5 text-[#a7ebf2] font-bold focus:outline-none w-32"
+                    className="bg-white/10 border border-white/20 rounded px-2 py-0.5 text-[#a7ebf2] font-bold focus:outline-none w-40 backdrop-blur-sm"
                     autoFocus
                     onKeyDown={(e) => e.key === 'Enter' && handleNameSave()}
                   />
-                  <button onClick={handleNameSave} className="p-1 hover:bg-white/10 rounded text-green-400">
+                  <button onClick={handleNameSave} className="p-1 hover:bg-white/10 rounded-full text-green-400 transition-colors">
                     <FaCheck />
                   </button>
                 </div>
               ) : (
                 <div className="flex items-center gap-2 group cursor-pointer" onClick={startEditingName}>
-                  <h1 className="text-xl font-bold border-b border-transparent group-hover:border-[#a7ebf2]/50 transition-colors">
+                  <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-[#a7ebf2] border-b border-transparent group-hover:border-[#a7ebf2]/50 transition-all">
                     {displayName || "Friend"}!
                   </h1>
-                  <FaPen className="text-xs opacity-0 group-hover:opacity-100 transition-opacity text-gray-400" />
+                  <FaPen className="text-xs opacity-0 group-hover:opacity-100 transition-opacity text-[#a7ebf2]" />
                 </div>
               )}
             </div>
 
-            <p className="text-sm opacity-80">Here is your wellness overview.</p>
+            <p className="text-sm text-[#a7ebf2]/80 font-medium">Here is your wellness overview.</p>
           </div>
         </div>
         <button
           onClick={() => signOut({ callbackUrl: "/login" })}
-          className="flex items-center gap-2 px-4 py-2 hover:bg-white/10 rounded-lg transition-colors"
+          className="flex items-center gap-2 px-5 py-2.5 hover:bg-white/10 rounded-xl transition-all duration-300 border border-transparent hover:border-white/10 group"
         >
-          <span className="hidden md:inline font-medium">Log Out</span>
-          <IoIosLogOut className="text-xl" />
+          <span className="hidden md:inline font-medium group-hover:text-white transition-colors">Log Out</span>
+          <IoIosLogOut className="text-xl group-hover:scale-110 transition-transform" />
         </button>
       </header>
 
@@ -333,7 +480,10 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
         {/* Mood Tracker Card */}
-        <div className="bg-[#023859] p-6 rounded-xl shadow-lg hover:transform hover:scale-[1.02] transition-all duration-300">
+        {/* Mood Tracker Card */}
+        {/* Mood Tracker Card */}
+        {/* Mood Tracker Card */}
+        <div className="bg-[#023859]/90 backdrop-blur-md p-6 rounded-2xl shadow-xl border border-white/10 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 h-full flex flex-col animate-slideUp delay-100 group">
           <div className="flex justify-between items-start mb-4">
             <div className="bg-blue-500/20 p-3 rounded-lg">
               <FaSmile className="text-[#a7ebf2] text-2xl" />
@@ -358,7 +508,10 @@ export default function Dashboard() {
         </div>
 
         {/* Progress Card */}
-        <div className="bg-[#023859] p-6 rounded-xl shadow-lg hover:transform hover:scale-[1.02] transition-all duration-300">
+        {/* Progress Card */}
+        {/* Progress Card */}
+        {/* Progress Card */}
+        <div className="bg-[#023859]/90 backdrop-blur-md p-6 rounded-2xl shadow-xl border border-white/10 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 h-full flex flex-col animate-slideUp delay-200">
           <div className="flex justify-between items-start mb-4">
             <div className="bg-purple-500/20 p-3 rounded-lg">
               <FaChartLine className="text-[#a7ebf2] text-2xl" />
@@ -366,39 +519,88 @@ export default function Dashboard() {
           </div>
           <h3 className="text-xl font-bold text-white mb-2">Weekly Progress</h3>
           <p className="text-[#91d7df] text-sm mb-4">You've completed {stats.completedGoals} wellness acts!</p>
-          <div className="w-full bg-gray-700 rounded-full h-2.5 mb-2">
-            <div className="bg-[#a7ebf2] h-2.5 rounded-full" style={{ width: `${stats.progress}%` }}></div>
+          <div className="w-full bg-gray-700/50 rounded-full h-3 mb-2 overflow-hidden">
+            <div className="bg-gradient-to-r from-[#a7ebf2] to-[#60c0ce] h-3 rounded-full transition-all duration-1000 ease-out" style={{ width: `${stats.progress}%` }}></div>
           </div>
           <span className="text-xs text-[#a7ebf2]">{stats.progress}% to weekly goal</span>
         </div>
 
         {/* Sleep Tracker */}
-        <div className="bg-[#023859] p-6 rounded-xl shadow-lg hover:transform hover:scale-[1.02] transition-all duration-300">
+        {/* Sleep Tracker */}
+        {/* Sleep Tracker */}
+        {/* Sleep Tracker */}
+        <div className="bg-[#023859]/90 backdrop-blur-md p-6 rounded-2xl shadow-xl border border-white/10 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 h-full flex flex-col animate-slideUp delay-300">
           <div className="flex justify-between items-start mb-4">
             <div className="bg-indigo-500/20 p-3 rounded-lg">
               <FaBed className="text-[#a7ebf2] text-2xl" />
             </div>
+            <button
+              onClick={() => setIsSleepLoggingOpen(!isSleepLoggingOpen)}
+              className="text-xs font-semibold bg-[#a7ebf2] text-[#023859] px-2 py-1 rounded hover:bg-white transition-colors"
+            >
+              {isSleepLoggingOpen ? "Close" : "Log Sleep"}
+            </button>
           </div>
           <h3 className="text-xl font-bold text-white mb-1">Sleep Quality</h3>
-          <h4 className="text-3xl font-bold text-[#a7ebf2] mb-2">{stats.sleep}</h4>
-          <p className="text-[#91d7df] text-sm">Average sleep avg (last 7 days).</p>
+
+          {isSleepLoggingOpen ? (
+            <div className="mt-2 mb-2 animate-fadeIn">
+              <label className="text-xs text-[#91d7df]">Hours last night:</label>
+              <div className="flex gap-2 mt-1">
+                <input
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  value={sleepInput}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === "" || parseFloat(val) >= 0) setSleepInput(val);
+                  }}
+                  className="w-full bg-white/10 border border-white/20 rounded-lg p-1 text-white text-sm focus:outline-none"
+                />
+                <button
+                  onClick={handleSleepLogSubmit}
+                  className="bg-[#a7ebf2] text-[#023859] px-3 py-1 rounded-lg text-sm font-bold hover:bg-white"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <h4 className="text-3xl font-bold text-[#a7ebf2] mb-1">{stats.sleep}</h4>
+              <p className={`text-sm font-bold mb-1 ${stats.sleepQuality === 'Good' || stats.sleepQuality === 'Excellent' ? 'text-green-400' :
+                stats.sleepQuality === 'Fair' ? 'text-yellow-400' : 'text-red-400'
+                }`}>
+                {stats.sleepQuality}
+              </p>
+              <p className="text-[#91d7df] text-sm">Average sleep avg (last 7 days).</p>
+            </>
+          )}
         </div>
 
         {/* Activity */}
-        <div className="col-span-1 md:col-span-2 bg-[#004e75] p-6 rounded-xl shadow-lg text-white">
+        {/* Activity */}
+        {/* Activity */}
+        {/* Activity */}
+        <div className="col-span-1 md:col-span-2 bg-[#004e75]/90 backdrop-blur-md p-6 rounded-2xl shadow-xl border border-white/10 text-white h-full flex flex-col animate-slideUp delay-300 hover:shadow-2xl transition-all duration-300">
           <div className="flex items-center gap-3 mb-6">
             <FaWalking className="text-[#a7ebf2] text-2xl" />
             <h3 className="text-xl font-bold">Recent Activities</h3>
           </div>
-          <div className="space-y-4">
+          <div className="space-y-4 h-[140px] overflow-y-auto pr-2 custom-scrollbar">
             {stats.recentActivities.length > 0 ? (
               stats.recentActivities.map((item, i) => (
-                <div key={i} className="flex justify-between items-center p-3 bg-[#023859] rounded-lg border border-white/5 hover:bg-[#022c45] transition-colors">
+                <div key={i} className="flex justify-between items-center p-4 bg-[#023859]/80 rounded-xl border border-white/5 hover:bg-[#023859] hover:border-[#a7ebf2]/30 transition-all duration-200 group">
                   <div>
                     <p className="font-semibold text-[#a7ebf2]">{item.title}</p>
                     <p className="text-xs text-gray-400">{item.time}</p>
                   </div>
                   <span className="text-sm font-medium bg-white/10 px-3 py-1 rounded-full">{item.duration}</span>
+                  <div className="flex gap-2 ml-3">
+                    <button onClick={() => openEditModal(item)} className="text-gray-400 hover:text-white transition-colors"><FaEdit /></button>
+                    <button onClick={() => handleDeleteActivity(item.id)} className="text-gray-400 hover:text-red-400 transition-colors"><FaTrash /></button>
+                  </div>
                 </div>
               ))
             ) : (
@@ -408,15 +610,26 @@ export default function Dashboard() {
         </div>
 
         {/* Quick Review */}
-        <div className="bg-[#023859] p-6 rounded-xl shadow-lg flex flex-col justify-center items-center text-center">
-          <div className="bg-green-500/20 p-4 rounded-full mb-4">
-            <FaCalendarCheck className="text-[#a7ebf2] text-3xl" />
+        {/* Quick Review */}
+        {/* Quick Review */}
+        <div className="bg-[#023859]/90 backdrop-blur-md p-5 rounded-2xl shadow-xl border border-white/10 flex flex-col items-center text-center h-full relative overflow-hidden group animate-slideUp delay-300 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300">
+          {/* Background decoration */}
+          <div className="absolute top-0 right-0 w-24 h-24 bg-[#a7ebf2]/5 rounded-full -mr-12 -mt-12 blur-xl transition-all group-hover:bg-[#a7ebf2]/10"></div>
+
+          <div className="flex flex-col items-center justify-center flex-1 z-10 w-full">
+            <div className="bg-gradient-to-br from-green-400/20 to-blue-500/20 p-4 rounded-full mb-3 border border-white/5 shadow-[0_0_15px_rgba(167,235,242,0.1)]">
+              <FaCalendarCheck className="text-[#a7ebf2] text-3xl drop-shadow-md" />
+            </div>
+
+            <h3 className="text-lg font-bold text-white mb-1">Daily Check-in</h3>
+            <p className="text-[#91d7df] text-xs mb-4 max-w-[240px] leading-relaxed">
+              Track your mood, activities, and sleep.
+            </p>
           </div>
-          <h3 className="text-xl font-bold text-white mb-2">Daily Check-in</h3>
-          <p className="text-[#91d7df] text-sm mb-6">Have you taken a moment for yourself today?</p>
+
           <button
             onClick={() => setIsCheckInOpen(true)}
-            className="bg-[#a7ebf2] text-[#023859] font-bold py-2 px-6 rounded-full hover:bg-white transition-colors w-full"
+            className="bg-[#a7ebf2] text-[#023859] font-bold py-2 px-6 rounded-full text-sm hover:bg-white hover:scale-105 transition-all w-full shadow-lg relative z-10"
           >
             Start Check-in
           </button>
