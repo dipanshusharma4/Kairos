@@ -9,7 +9,7 @@ import connectDB from "@/db/connectDb";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 
-export const authoptions = NextAuth({
+export const authoptions = {
   providers: [
     // OAuth authentication providers...
     // GitHubProvider({
@@ -43,15 +43,15 @@ export const authoptions = NextAuth({
         await connectDB();
 
         const user = await User.findOne({
-    $or: [ // <-- The key MongoDB operator
-        { email: credentials.identifier },
-        { username: credentials.identifier }
-    ]
-         }).select("+password"); // Select '+'password' if not selected by default
+          $or: [ // <-- The key MongoDB operator
+            { email: credentials.identifier },
+            { username: credentials.identifier }
+          ]
+        }).select("+password"); // Select '+'password' if not selected by default
 
         if (user && user.password) {
           // Check if the provided password matches the HASHED password in the DB
-          
+
 
           const isMatch = await bcrypt.compare(
             credentials.password,
@@ -97,6 +97,7 @@ export const authoptions = NextAuth({
       if (dbUser) {
         // You might need to update your session object with custom data here
         session.user.name = dbUser.username;
+        session.user.id = dbUser._id.toString();
       }
       return session;
     },
@@ -106,8 +107,8 @@ export const authoptions = NextAuth({
     strategy: "jwt",
   },
   secret: process.env.NEXTAUTH_SECRET,
-});
+};
 
 const handler = NextAuth(authoptions);
 // Export both GET and POST handlers
-export { authoptions as GET, authoptions as POST };
+export { handler as GET, handler as POST };

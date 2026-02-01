@@ -68,7 +68,7 @@ export default function Login() {
 
         <div className="mt-8">
           <button
-            onClick={() => signIn("google", { callbackUrl: "/chatbot"})}
+            onClick={() => signIn("google", { callbackUrl: "/chatbot" })}
             disabled={loading}
             className="group relative w-full flex justify-center items-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition"
           >
@@ -102,6 +102,7 @@ export default function Login() {
                 type="text"
                 autoComplete="username"
                 required
+                suppressHydrationWarning={true}
                 placeholder="Email or Username"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)} // Use setIdentifier

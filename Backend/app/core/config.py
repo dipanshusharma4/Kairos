@@ -35,9 +35,9 @@ class Settings(BaseSettings):
     redis_url: str = Field("redis://localhost:6379/0", alias="REDIS_URL")
     fernet_key: str = Field(..., alias="FERNET_KEY")
     
-    # Groq API Configuration
-    groq_api_key: str = Field(..., alias="GROQ_API_KEY")
-    groq_model: str = Field("mixtral-8x7b-32768", alias="GROQ_MODEL")
+    # Groq API Configuration (Optional)
+    groq_api_key: str | None = Field(None, alias="GROQ_API_KEY")
+    groq_model: str | None = Field("mixtral-8x7b-32768", alias="GROQ_MODEL")
 
     # --- Google OAuth Settings (Optional for development) ---
     google_client_id: str = Field("", alias="GOOGLE_CLIENT_ID")
@@ -63,7 +63,7 @@ except Exception as e:
     print("\nRequired environment variables:")
     print("  - SECRET_KEY")
     print("  - FERNET_KEY")
-    print("  - GROQ_API_KEY")
+    # print("  - GROQ_API_KEY") # No longer strictly required
     print("  - GOOGLE_CLIENT_ID (optional)")
     print("  - GOOGLE_CLIENT_SECRET (optional)")
     print("\nTo fix this:")

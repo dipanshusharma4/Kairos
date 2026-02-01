@@ -7,7 +7,7 @@ import { signOut, useSession } from "next-auth/react";
 import { IoIosLogOut } from "react-icons/io";
 import { HiMenuAlt3 } from "react-icons/hi";
 import { IoMdClose } from "react-icons/io";
-import { FaPlus } from "react-icons/fa6";
+import { FaPlus, FaPen, FaCheck, FaChevronDown, FaTrash } from "react-icons/fa6";
 import { RiVoiceprintFill } from "react-icons/ri";
 import { IoSendSharp } from "react-icons/io5";
 
@@ -17,9 +17,20 @@ export default function chatbot() {
   const [chatMessages, setChatMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const sideBarRef = useRef(null);
 
-  //   const websocket = useRef(null);
+  // New conversation states
+  const [conversations, setConversations] = useState([]);
+  const [currentConversationId, setCurrentConversationId] = useState(null);
+
+  // Renaming states
+  const [editingConversationId, setEditingConversationId] = useState(null);
+  const [editTitle, setEditTitle] = useState("");
+
+  // Header Dropdown state
+  const [isHeaderDropdownOpen, setIsHeaderDropdownOpen] = useState(false);
+
+  const sideBarRef = useRef(null);
+  const headerDropdownRef = useRef(null);
   const messageEndRef = useRef(null);
   const router = useRouter();
 
@@ -28,72 +39,152 @@ export default function chatbot() {
       if (sideBarRef.current && !sideBarRef.current.contains(event.target)) {
         setIsSidebarOpen(false);
       }
+      if (headerDropdownRef.current && !headerDropdownRef.current.contains(event.target)) {
+        setIsHeaderDropdownOpen(false);
+      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [sideBarRef]);
+  }, [sideBarRef, headerDropdownRef]);
+
+  // Derived state
+  const currentConversation = conversations.find(c => c._id === currentConversationId);
+  const currentTitle = currentConversation ? currentConversation.title : "New Chat";
+
+  // Fetch Conversations List
+  const fetchConversations = async () => {
+    try {
+      const res = await fetch("/api/chat/conversations");
+      if (res.ok) {
+        const data = await res.json();
+        setConversations(data);
+
+        // Always default to New Chat on initial load, even if history exists
+        if (!currentConversationId) {
+          handleNewChat();
+          setIsLoading(false);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch conversations:", error);
+      setIsLoading(false);
+    }
+  };
+
+  // Select a conversation and load its history
+  const selectConversation = async (conversationId) => {
+    setCurrentConversationId(conversationId);
+    setIsLoading(true);
+    setIsHeaderDropdownOpen(false); // Close header dropdown if open
+    try {
+      const response = await fetch(`/api/chat/history?conversationId=${conversationId}`);
+      if (response.ok) {
+        const history = await response.json();
+        setChatMessages(Array.isArray(history) ? history : []);
+      }
+    } catch (error) {
+      console.error("Failed to load history", error);
+      setChatMessages([{ sender: "Kairos", text: "Error loading history." }]);
+    } finally {
+      setIsLoading(false);
+      if (window.innerWidth < 768) setIsSidebarOpen(false); // Mobile: close sidebar on select
+    }
+  };
+
+  // Start editing a conversation title
+  const startEditing = (e, conv) => {
+    e.stopPropagation(); // Prevent selecting the conversation
+    setEditingConversationId(conv._id);
+    setEditTitle(conv.title);
+  };
+
+  // Save the new title
+  const saveTitle = async (e, conversationId) => {
+    e.stopPropagation();
+    if (!editTitle.trim()) {
+      setEditingConversationId(null);
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/chat/conversations", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversationId, title: editTitle }),
+      });
+
+      if (res.ok) {
+        setConversations(conversations.map(c =>
+          c._id === conversationId ? { ...c, title: editTitle } : c
+        ));
+      }
+    } catch (error) {
+      console.error("Failed to rename conversation:", error);
+    } finally {
+      setEditingConversationId(null);
+    }
+  };
+
+  // Delete a conversation
+  const deleteConversation = async (e, conversationId) => {
+    e.stopPropagation();
+    if (!confirm("Are you sure you want to delete this chat?")) return;
+
+    try {
+      const res = await fetch(`/api/chat/conversations?conversationId=${conversationId}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        setConversations(conversations.filter(c => c._id !== conversationId));
+        if (currentConversationId === conversationId) {
+          handleNewChat();
+        }
+      }
+    } catch (error) {
+      console.error("Failed to delete conversation:", error);
+    }
+  };
 
   useEffect(() => {
     document.title = "Chatbot - Kairos";
     if (status === "unauthenticated") {
       router.push("/login");
+    } else if (status === "authenticated") {
+      fetchConversations();
     }
   }, [status, router]);
-
-  useEffect(() => {
-    if (status === "loading" || status === "unauthenticated") {
-      return;
-    }
-    const fetchHistory = async () => {
-      setIsLoading(true);
-      try {
-        setChatMessages([]);
-      } catch (error) {
-        setChatMessages([
-          { sender: "Kairos", text: "Error connecting. Please refresh." },
-        ]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchHistory();
-  }, [session, status]);
 
   useEffect(() => {
     messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages, isLoading]);
 
-  // useEffect(() => {
-  //     if (!session) return;
-
-  //     const fetchHistory = async () => {
-  //         setIsLoading(true);
-  //         try {
-  //             // Calls the correct, simpler history endpoint
-  //             const response = await fetch(`${API_URL}/api/chat/history/${userId}`);
-  //             if (response.ok) {
-  //                 const history = await response.json();
-  //                 const formatted = history.map(msg => ({ sender: msg.role === 'user' ? 'You' : 'Kairos', text: msg.content }));
-  //                 setChatMessages(formatted.length > 0 ? formatted : [{ sender: "Kairos", text: "Welcome! How can I help?" }]);
-  //             } else {
-  //                setChatMessages([{ sender: "Kairos", text: "Welcome! How can I help?" }]);
-  //             }
-  //         } catch (error) {
-  //             setChatMessages([{ sender: "Kairos", text: "Error connecting. Please refresh." }]);
-  //         } finally {
-  //             setIsLoading(false);
-  //         }
-  //     };
-  //     fetchHistory();
-  // }, [session]);
-
   const handleSend = async () => {
     if (!chatInput.trim()) return;
 
+    let activeConvId = currentConversationId;
+
+    // If sending a message and no conversation is selected (or it's a "New Chat" state), create one
+    if (!activeConvId) {
+      try {
+        const res = await fetch("/api/chat/conversations", { method: 'POST' });
+        if (res.ok) {
+          const newConv = await res.json();
+          activeConvId = newConv._id;
+          setCurrentConversationId(activeConvId);
+          setConversations(prev => [newConv, ...prev]);
+        }
+      } catch (err) {
+        console.error("Failed to create new conversation", err);
+        alert("Unable to start a new chat. Please Log Out and Log In again to refresh your session.");
+        return;
+      }
+    }
+
     setIsLoading(true);
     const userMessage = { sender: "You", text: chatInput };
+    // Optimistic UI update
     const updatedMessages = [...chatMessages, userMessage];
-
     setChatMessages(updatedMessages);
     setChatInput("");
 
@@ -107,19 +198,32 @@ export default function chatbot() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt: chatInput,
+          prompt: userMessage.text,
           history: historyForApi,
+          conversationId: activeConvId
         }),
       });
 
       if (!response.ok) {
+        if (response.status === 429) {
+          const rateLimitMsg = {
+            sender: "Kairos",
+            text: "Whoa, we're chatting a bit too fast! ⚡️\n\nI need a quick breather (about 30 seconds) to cool down my circuits. Thanks for being patient! 🌿"
+          };
+          setChatMessages((prev) => [...prev, rateLimitMsg]);
+          return;
+        }
         throw new Error("Network response was not ok");
       }
 
       const data = await response.json();
-      const botResponse = { sender: "Kairos", text: data.text };
+      const botResponse = { sender: "Kairos", text: data.text || "Sorry, I couldn't understand that." };
 
       setChatMessages((prev) => [...prev, botResponse]);
+
+      // Refresh conversations list (to update 'updatedAt' order or titles)
+      fetchConversations();
+
     } catch (error) {
       console.error("Chat API Error:", error);
       setChatMessages((prev) => [
@@ -135,8 +239,10 @@ export default function chatbot() {
   };
 
   const handleNewChat = () => {
+    setCurrentConversationId(null);
     setChatMessages([]);
     setIsSidebarOpen(false);
+    setIsHeaderDropdownOpen(false);
   };
 
   return (
@@ -144,15 +250,15 @@ export default function chatbot() {
       <main className="flex-1 flex flex-col min-h-0 relative">
         {/* --- Sidebar --- */}
         <aside
-          className={`absolute top-0 left-0 h-full bg-[#011c40] w-64 md:w-80 shadow-2xl z-30 transform transition-transform duration-300 ${
-            isSidebarOpen ? "block" : "hidden"
-          }`}
+          className={`absolute top-0 left-0 h-full bg-[#011c40] w-64 md:w-80 shadow-2xl z-30 transform transition-transform duration-300 ${isSidebarOpen ? "block" : "hidden"
+            }`}
           ref={sideBarRef}
         >
           <div className="p-4 flex flex-col h-full">
             <div className="flex justify-between items-center mb-4 flex-shrink-0">
-              <h2 className="text-xl font-bold text-[#a7ebf2]">Chat History</h2>
+              <h2 className="text-xl font-bold text-[#a7ebf2]">Chats</h2>
               <button
+                suppressHydrationWarning={true}
                 onClick={() => setIsSidebarOpen(false)}
                 className="text-[#a7ebf2] p-1 rounded-full hover:bg-white/10"
               >
@@ -161,31 +267,71 @@ export default function chatbot() {
             </div>
             <button
               onClick={handleNewChat}
-              className="flex items-center justify-center w-full p-2 mb-4 text-[#a7ebf2] bg-white/5 rounded-md hover:bg-white/10"
+              className="flex items-center justify-center w-full p-3 mb-4 text-[#a7ebf2] bg-white/10 hover:bg-white/20 rounded-lg transition-colors border border-white/10"
             >
-              <FaPlus className="text-xl" />
-              <span className="ml-2">New Chat</span>
+              <FaPlus className="text-sm" />
+              <span className="ml-2 font-medium">New Chat</span>
             </button>
 
-            <ul className="space-y-2 overflow-y-auto flex-1">
-              {chatMessages.map((msg, idx) => (
-                <li
-                  key={idx}
-                  className={`p-2 rounded-md text-sm truncate ${
-                    msg.sender === "You"
-                      ? "text-gray-400 text-right"
-                      : "text-gray-200"
-                  }`}
+            <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+              {conversations.map((conv) => (
+                <div
+                  key={conv._id}
+                  onClick={() => selectConversation(conv._id)}
+                  className={`w-full text-left p-3 rounded-lg text-sm transition-colors flex justify-between items-center group cursor-pointer ${currentConversationId === conv._id
+                    ? "bg-[#a7ebf2] text-[#023859] font-medium"
+                    : "text-gray-300 hover:bg-white/5"
+                    }`}
                 >
-                  {msg.text}
-                </li>
+                  {editingConversationId === conv._id ? (
+                    <div className="flex items-center w-full">
+                      <input
+                        type="text"
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.key === 'Enter' && saveTitle(e, conv._id)}
+                        className="bg-white/20 text-inherit border-none rounded px-1 py-0.5 text-xs w-full mr-2 focus:outline-none"
+                        autoFocus
+                      />
+                      <button onClick={(e) => saveTitle(e, conv._id)} className="p-1 hover:bg-white/20 rounded">
+                        <FaCheck className="text-xs" />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <span className="truncate flex-1">{conv.title || "New Chat"}</span>
+                      <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => startEditing(e, conv)}
+                          className={`p-1.5 hover:bg-white/20 rounded mr-1 ${currentConversationId === conv._id ? "text-[#023859]" : "text-gray-400"
+                            }`}
+                          title="Rename"
+                        >
+                          <FaPen className="text-xs" />
+                        </button>
+                        <button
+                          onClick={(e) => deleteConversation(e, conv._id)}
+                          className={`p-1.5 hover:bg-red-500/20 rounded hover:text-red-400 ${currentConversationId === conv._id ? "text-[#023859]" : "text-gray-400"
+                            }`}
+                          title="Delete"
+                        >
+                          <FaTrash className="text-xs" />
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
               ))}
-            </ul>
+              {conversations.length === 0 && (
+                <div className="text-gray-500 text-sm text-center mt-4">No past conversations</div>
+              )}
+            </div>
 
-            <div className="mt-4 flex-shrink-0">
+            <div className="mt-4 flex-shrink-0 pt-4 border-t border-gray-700">
               <button
                 onClick={() => signOut({ callbackUrl: "/signup" })}
-                className="flex items-center w-full text-left px-4 py-2 text-lg font-semibold text-red-400 hover:bg-red-500/10 rounded-md border-t-2 border-gray-500 gap-2"
+                className="flex items-center w-full text-left px-4 py-2 text-lg font-semibold text-red-400 hover:bg-red-500/10 rounded-md gap-2"
               >
                 <IoIosLogOut className="text-2xl" />
                 <span className="ml-2">Log Out</span>
@@ -197,14 +343,15 @@ export default function chatbot() {
         {/* --- Main Chat Window --- */}
         <div className="relative flex-1 flex flex-col bg-[#023859] rounded-lg shadow-xl overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b-2 border-gray-700 flex-shrink-0">
-            <div className="flex items-center">
+            <div className="flex items-center w-full">
               <button
+                suppressHydrationWarning={true}
                 onClick={() => setIsSidebarOpen(true)}
                 className="mr-4 text-[#a7ebf2] p-2 rounded-full hover:bg-white/10"
               >
                 <HiMenuAlt3 className="text-2xl" />
               </button>
-              <div className="rounded-full mr-4 w-10 h-10">
+              <div className="rounded-full mr-4 w-10 h-10 flex-shrink-0">
                 <Image
                   src="/chatbot_logo.svg"
                   alt="Kairos"
@@ -212,9 +359,52 @@ export default function chatbot() {
                   height={40}
                 />
               </div>
-              <div>
-                <p className="font-semibold text-[#a7ebf2]">Kairos</p>
-                <p className="text-xs text-gray-400">Your wellness companion</p>
+
+              {/* HEADER TITLE WITH DROPDOWN */}
+              <div className="relative flex-1" ref={headerDropdownRef}>
+                <button
+                  onClick={() => setIsHeaderDropdownOpen(!isHeaderDropdownOpen)}
+                  className="flex items-center gap-2 group text-left max-w-full"
+                >
+                  <div className="min-w-0">
+                    <p className="font-bold text-[#a7ebf2] text-lg leading-tight truncate">{currentTitle}</p>
+                    <p className="text-xs text-gray-400 group-hover:text-gray-300 transition-colors truncate">Kairos • {currentConversation ? 'Active' : 'New'}</p>
+                  </div>
+                  <FaChevronDown className={`text-[#a7ebf2] text-xs transition-transform duration-200 flex-shrink-0 ${isHeaderDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {/* Dropdown Menu */}
+                {isHeaderDropdownOpen && (
+                  <div className="absolute top-full left-0 mt-2 w-72 bg-[#011c40] border border-gray-700 rounded-xl shadow-2xl z-50 overflow-hidden ring-1 ring-white/10">
+                    <div className="p-2 border-b border-gray-700 bg-[#011c40]/50 backdrop-blur-sm">
+                      <p className="text-xs font-semibold text-gray-400 ml-2">Switch Conversation</p>
+                    </div>
+                    <div className="max-h-80 overflow-y-auto custom-scrollbar">
+                      <button
+                        onClick={handleNewChat}
+                        className="w-full text-left px-4 py-3 hover:bg-[#a7ebf2]/10 text-sm text-[#a7ebf2] flex items-center gap-2 font-medium border-b border-gray-700/50"
+                      >
+                        <FaPlus className="text-xs" /> New Chat
+                      </button>
+                      {conversations.map(conv => (
+                        <button
+                          key={conv._id}
+                          onClick={() => selectConversation(conv._id)}
+                          className={`w-full text-left px-4 py-3 hover:bg-white/5 text-sm transition-colors border-b border-gray-700/50 last:border-0 ${currentConversationId === conv._id ? "bg-[#a7ebf2]/20 text-white font-medium" : "text-gray-300"
+                            }`}
+                        >
+                          <div className="truncate">{conv.title || "New Chat"}</div>
+                          <div className="text-[10px] text-gray-500 mt-0.5">
+                            {new Date(conv.updatedAt).toLocaleDateString()}
+                          </div>
+                        </button>
+                      ))}
+                      {conversations.length === 0 && (
+                        <div className="p-4 text-center text-xs text-gray-500">No recent chats</div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -226,7 +416,7 @@ export default function chatbot() {
                   Hello,{" "}
                   {session?.user?.name &&
                     session.user.name.charAt(0).toUpperCase() +
-                      session.user.name.slice(1)}
+                    session.user.name.slice(1)}
                 </h1>
               </div>
             )}
@@ -250,6 +440,7 @@ export default function chatbot() {
           <div className="p-4 border-t-2 border-gray-700 flex-shrink-0">
             <div className="mx-auto flex gap-2 justify-center">
               <input
+                suppressHydrationWarning={true}
                 type="text"
                 id="text"
                 className="max-w-full lg:max-w-4xl flex-1 border-0 rounded-full px-4 py-3 bg-gray-600/50 text-white placeholder-gray-400 focus:ring-2 focus:ring-[#a7ebf2] outline-none"
@@ -263,9 +454,8 @@ export default function chatbot() {
 
               <button
                 className={`px-3.5 rounded-full hover:bg-[#01295c] 
-                bg-[#011c40] cursor-pointer ${
-                  !isLoading ? "bg-[#011c40]" : "bg-gray-700"
-                }`}
+                bg-[#011c40] cursor-pointer ${!isLoading ? "bg-[#011c40]" : "bg-gray-700"
+                  }`}
                 onClick={handleSend}
                 disabled={isLoading}
               >
@@ -274,9 +464,8 @@ export default function chatbot() {
 
               <button
                 className={`px-4 rounded-full hover:bg-[#01295c] 
-                bg-[#011c40] cursor-pointer ${
-                  !isLoading ? "bg-[#011c40]" : "bg-gray-700"
-                }`}
+                bg-[#011c40] cursor-pointer ${!isLoading ? "bg-[#011c40]" : "bg-gray-700"
+                  }`}
                 onClick={handleSend}
                 disabled={isLoading}
               >
@@ -324,24 +513,21 @@ const ChatMessageBubble = ({ msg, isLoading = false }) => {
     <div className={`mb-4 flex ${isUser ? "justify-end" : "justify-start"}`}>
       {!isUser && (
         <div
-          className={`w-8 h-8 flex-shrink-0 ${
-            isLoading ? "animate-pulse" : ""
-          }`}
+          className={`w-8 h-8 flex-shrink-0 ${isLoading ? "animate-pulse" : ""
+            }`}
         >
           <Image src="/chatbot_logo.svg" alt="Kairos" width={32} height={32} />
         </div>
       )}
       <div
-        className={`px-4 py-2 max-w-[80%] rounded-2xl text-base break-words mx-2 shadow-md ${
-          isUser
-            ? "bg-[#54acbf] text-white rounded-tr-none"
-            : "bg-[#a7ebf2] text-[#023859] rounded-tl-none"
-        }`}
+        className={`px-4 py-2 max-w-[80%] rounded-2xl text-base break-words mx-2 shadow-md ${isUser
+          ? "bg-[#54acbf] text-white rounded-tr-none"
+          : "bg-[#a7ebf2] text-[#023859] rounded-tl-none"
+          }`}
       >
         <p
-          className={`leading-relaxed whitespace-pre-wrap ${
-            isLoading ? "italic opacity-75 font-medium" : ""
-          }`}
+          className={`leading-relaxed whitespace-pre-wrap ${isLoading ? "italic opacity-75 font-medium" : ""
+            }`}
         >
           {isLoading ? loadingText : msg.text}
         </p>
@@ -353,11 +539,10 @@ const ChatMessageBubble = ({ msg, isLoading = false }) => {
             alt="You"
             width={32}
             height={32}
-            className={`rounded-full ${
-              !session?.user.image
-                ? "filter invert p-1"
-                : "object-center w-full h-full"
-            }`}
+            className={`rounded-full ${!session?.user.image
+              ? "filter invert p-1"
+              : "object-center w-full h-full"
+              }`}
           />
         </div>
       )}

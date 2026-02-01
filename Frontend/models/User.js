@@ -6,7 +6,8 @@ const { Schema, model } = mongoose;
 const UserSchema = new Schema({
   email: { type: String, required: true, unique: true },
   username: { type: String, required: true },
-  password: { type: String, select: false},
+  password: { type: String, select: false },
+  image: { type: String, default: "" }, // Stores URL or Base64
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 });

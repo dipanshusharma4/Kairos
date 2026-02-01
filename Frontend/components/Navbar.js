@@ -73,7 +73,7 @@ export default function Navbar() {
     <nav className="bg-[#011c40] py-4 pl-4 pr-2 shadow-md relative z-40">
       <div className="mx-auto flex justify-between items-center">
         <Link
-          href="/"
+          href={session ? "/chatbot" : "/"}
           className="z-20 flex items-center gap-3 text-[#a7ebf2] text-2xl font-bold tracking-wider whitespace-nowrap"
         >
           <Image
@@ -126,7 +126,7 @@ export default function Navbar() {
                       <p className="font-bold text-white truncate">
                         {session?.user?.name &&
                           session.user.name.charAt(0).toUpperCase() +
-                            session.user.name.slice(1)}
+                          session.user.name.slice(1)}
                       </p>
                     </div>
                     <div className="md:hidden">
@@ -195,7 +195,7 @@ export default function Navbar() {
                 </button>
                 {isSidebarOpen && (
                   <div className="absolute top-14 -right-3.5 w-32 bg-[#023859] rounded-tl-lg rounded-bl-lg shadow-xl border border-gray-700 py-2">
-                    
+
                     <div className="flex flex-col">
                       {displayLinks.map((link) => (
                         <Link
@@ -224,7 +224,7 @@ export default function Navbar() {
 
 
 
-            
+
           </div>
         </div>
       </div>

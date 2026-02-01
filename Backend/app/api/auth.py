@@ -113,9 +113,14 @@ async def google_auth_callback(request: Request):
             status_code=503, 
             detail="Google OAuth is not configured. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in your .env file."
         )
+    
+    redirect_uri = request.url_for('google_auth_callback')
     try:
-        token_data = await oauth.google.authorize_access_token(request)
+        # Explicitly pass redirect_uri to ensure consistency
+        token_data = await oauth.google.authorize_access_token(request, redirect_uri=str(redirect_uri))
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=401, detail=f"Could not validate Google credentials: {e}")
 
     user_info = token_data.get('userinfo')
@@ -126,6 +131,8 @@ async def google_auth_callback(request: Request):
     
     access_token = create_access_token(subject=str(user.id), expires_delta=timedelta(days=30))
     
+    # Use the Referer or a flexible base URL if localhost:3000 is not desired
+    # For now, keeping localhost:3000 as per original code but adding a TODO
     frontend_url = f"http://localhost:3000/auth/callback?token={access_token}&user_id={str(user.id)}"
     return RedirectResponse(url=frontend_url)
 
