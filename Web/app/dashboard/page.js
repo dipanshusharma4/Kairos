@@ -120,6 +120,31 @@ export default function Dashboard() {
     }
   };
 
+  const handleImageRemove = async (e) => {
+    e.preventDefault();
+    // Stop bubbling isn't strictly needed if button is outside label but good practice if nested
+    // However, since we place button outside label but inside the main div which might track clicks? 
+    // Actually the label has the htmlFor, so clicking label triggers input. Clicking button won't if it's on top and doesn't propagate?
+    // Let's safe guard.
+
+    if (!confirm("Are you sure you want to remove your profile picture?")) return;
+
+    try {
+      const res = await fetch("/api/user/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: "" }) // Send empty string to remove
+      });
+
+      if (res.ok) {
+        setDisplayImage("");
+        await update({ image: "" });
+      }
+    } catch (error) {
+      console.error("Failed to remove image", error);
+    }
+  };
+
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -434,6 +459,16 @@ export default function Dashboard() {
                 </div>
               </div>
             </label>
+            {/* Remove Profile Button */}
+            {displayImage && (
+              <button
+                onClick={handleImageRemove}
+                className="absolute -top-1 -right-1 bg-red-500 hover:bg-red-600 text-white p-1 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-20"
+                title="Remove Profile Picture"
+              >
+                <FaTrash className="text-[10px]" />
+              </button>
+            )}
             <input
               type="file"
               id="avatar-upload"
@@ -498,9 +533,8 @@ export default function Dashboard() {
           </div>
           <h3 className="text-xl font-bold text-white mb-2">Mood Tracker</h3>
           <p className="text-[#91d7df] text-sm mb-4">
-            {stats.mood ? `You're feeling ${
-              { '😢': 'Sad', '😐': 'Neutral', '🙂': 'Good', '😄': 'Happy', '🤩': 'Excited' }[stats.mood] || stats.mood
-            } today!` : "How are you feeling today?"}
+            {stats.mood ? `You're feeling ${{ '😢': 'Sad', '😐': 'Neutral', '🙂': 'Good', '😄': 'Happy', '🤩': 'Excited' }[stats.mood] || stats.mood
+              } today!` : "How are you feeling today?"}
           </p>
           <div className="flex justify-between gap-2 mt-2">
             {['😢', '😐', '🙂', '😄', '🤩'].map((emoji, idx) => (

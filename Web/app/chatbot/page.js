@@ -149,7 +149,7 @@ export default function chatbot() {
       if (!currentConversationId) {
         // Ensure we start in a clean state if no conversation is selected
         handleNewChat();
-        setIsLoading(false); 
+        setIsLoading(false);
       }
     }
   }, [status, router]);
@@ -162,6 +162,7 @@ export default function chatbot() {
   const [isListening, setIsListening] = useState(false);
   const [voiceActive, setVoiceActive] = useState(false); // UI State
   const voiceActiveRef = useRef(false); // Ref for callbacks
+  const recognitionRef = useRef(null); // Ref for Recognition Instance
 
   // Sync Ref with State
   useEffect(() => {
@@ -175,12 +176,18 @@ export default function chatbot() {
       return;
     }
 
+    // Stop any previous instance
+    if (recognitionRef.current) {
+      recognitionRef.current.abort();
+    }
+
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
 
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.lang = 'en-US'; 
+    recognition.continuous = false; // We want one command/sentence at a time
+    recognition.interimResults = true; // Show results as we speak
+    recognition.lang = 'en-US';
 
     recognition.onstart = () => {
       setIsListening(true);
@@ -189,27 +196,44 @@ export default function chatbot() {
     };
 
     recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      setChatInput(transcript);
-      handleSend(transcript, true); 
+      const result = event.results[0];
+      const transcript = result[0].transcript;
+
+      setChatInput(transcript); // Live update input box
+
+      if (result.isFinal) {
+        handleSend(transcript, true);
+      }
     };
 
     recognition.onerror = (event) => {
+      // 'aborted' is expected when we stop manually, so we ignore it completely
+      if (event.error === 'aborted') return;
+
       console.error("Speech recognition error", event.error);
       setIsListening(false);
-      // Don't disable voice mode on simple no-speech error, allow user to click again?
-      // Or maybe we should? For now, keep it on so they can try again or we can auto-restart?
-      // Let's stick to safe defaults: if error, stop listing. User clicks again.
     };
 
     recognition.onend = () => {
       setIsListening(false);
+      // Determine if we should restart listening or just stop based on logic?
+      // Since continuous=false, it naturally ends after one sentence.
+      // If we want "Conversation Mode", we should restart it in handleSend AFTER the bot speaks.
     };
 
-    recognition.start();
+    try {
+      recognition.start();
+    } catch (e) {
+      console.error("Failed to start recognition:", e);
+    }
   };
 
-  const stopListening = () => {  
+  const stopListening = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.abort(); // Actually stop the browser engine
+      recognitionRef.current = null;
+    }
+
     setIsListening(false);
     setVoiceActive(false);
     voiceActiveRef.current = false;
@@ -221,30 +245,34 @@ export default function chatbot() {
   const speak = (text) => {
     if (!('speechSynthesis' in window)) return;
 
-    // Clean text...
+    // Clean text for better speech
     const cleanText = text
-      .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
-      .replace(/[*#]/g, '') 
-      .replace(/\s+/g, ' ')
+      .replace(/<[^>]*>/g, '') // Remove HTML tags if any
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Remove markdown links, keep text: [text](url) -> text
+      .replace(/[`*#_~]/g, '') // Remove markdown symbols (*, #, _, ~, `)
+      .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '') // Remove emojis
+      .replace(/\n+/g, '. ') // Replace newlines with pause
+      .replace(/\s+/g, ' ') // Collapse multiple spaces
       .trim();
 
     if (!cleanText) return;
 
-    window.speechSynthesis.cancel(); 
+    window.speechSynthesis.cancel();
 
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.lang = "en-US";
-    utterance.rate = 1;
+    utterance.rate = 0.9; // Slightly slower for a more relaxed, human feel
     utterance.pitch = 1;
 
     // Voice Selection
     const voices = window.speechSynthesis.getVoices();
     const englishVoices = voices.filter(voice => voice.lang.startsWith('en'));
-    const preferredVoice = englishVoices.find(v => v.name.includes("Google US English")) 
-                        || englishVoices.find(v => v.name.includes("Microsoft Zira"))
-                        || englishVoices.find(v => v.name.includes("Samantha")) 
-                        || englishVoices.find(v => v.lang === "en-US")
-                        || englishVoices[0];
+    const preferredVoice = englishVoices.find(v => v.name.includes("Natural"))
+      || englishVoices.find(v => v.name.includes("Google US English"))
+      || englishVoices.find(v => v.name.includes("Samantha"))
+      || englishVoices.find(v => v.name.includes("Microsoft Zira"))
+      || englishVoices.find(v => v.lang === "en-US")
+      || englishVoices[0];
 
     if (preferredVoice) utterance.voice = preferredVoice;
 
@@ -257,7 +285,7 @@ export default function chatbot() {
 
     window.speechSynthesis.speak(utterance);
   };
-  
+
   // Ensure we cancel speech if we unmount or leave
   useEffect(() => {
     return () => {
@@ -266,7 +294,7 @@ export default function chatbot() {
   }, []);
 
   const handleSend = async (manualInput = null, isVoice = false) => {
-    const textToSend = manualInput || chatInput; 
+    const textToSend = manualInput || chatInput;
     if (!textToSend.trim()) return;
 
     // If this wasn't a voice action, ensure we don't speak back unless previously active? 
@@ -333,7 +361,7 @@ export default function chatbot() {
       const botResponse = { sender: "Kairos", text: botText };
 
       setChatMessages((prev) => [...prev, botResponse]);
-      
+
       // Speak response if voice active
       if (isVoice || voiceActive) {
         speak(botText);
@@ -576,15 +604,15 @@ export default function chatbot() {
 
               <button
                 className={`px-3.5 rounded-full hover:bg-[#01295c] transition-all duration-300
-                ${isListening 
-                  ? "bg-red-500 animate-pulse text-white shadow-[0_0_15px_rgba(239,68,68,0.5)]" 
-                  : voiceActive 
-                    ? "bg-red-500/20 text-red-300 border border-red-500/50" 
-                    : "bg-[#011c40] text-white"
-                } 
+                ${isListening
+                    ? "bg-red-500 animate-pulse text-white shadow-[0_0_15px_rgba(239,68,68,0.5)]"
+                    : voiceActive
+                      ? "bg-red-500/20 text-red-300 border border-red-500/50"
+                      : "bg-[#011c40] text-white"
+                  } 
                 ${isLoading ? "bg-gray-700 cursor-not-allowed" : "cursor-pointer"}`}
                 onClick={voiceActive ? stopListening : startListening}
-                disabled={isLoading && !voiceActive} 
+                disabled={isLoading && !voiceActive}
                 title={voiceActive ? "Stop Voice Mode" : "Start Voice Chat"}
               >
                 {voiceActive && !isListening ? <FaTrash className="text-sm" /> : <RiVoiceprintFill className="text-xl" />}

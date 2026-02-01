@@ -22,9 +22,8 @@ export async function PATCH(request) {
             updateData.username = username.trim();
         }
 
-        if (image) {
-            // Basic validation for base64 or url could go here, but strict check is complex.
-            // We assume frontend sends valid base64 data url or https url.
+        if (image !== undefined) {
+            // Allow empty string to clear the image, or new base64 string to update it
             updateData.image = image;
         }
 
