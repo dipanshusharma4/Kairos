@@ -478,8 +478,8 @@ export default function Dashboard() {
             />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#a7ebf2] to-white drop-shadow-sm">{greeting}, </h1>
+            <div className="flex flex-col md:flex-row md:items-center md:gap-2">
+              <h1 className="md:text-2xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#a7ebf2] to-white drop-shadow-sm">{greeting}, </h1>
 
               {isEditingName ? (
                 <div className="flex items-center gap-1">
@@ -497,7 +497,7 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <div className="flex items-center gap-2 group cursor-pointer" onClick={startEditingName}>
-                  <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-[#a7ebf2] border-b border-transparent group-hover:border-[#a7ebf2]/50 transition-all">
+                  <h1 className="md:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-[#a7ebf2] border-b border-transparent group-hover:border-[#a7ebf2]/50 transition-all">
                     {displayName || "Friend"}!
                   </h1>
                   <FaPen className="text-xs opacity-0 group-hover:opacity-100 transition-opacity text-[#a7ebf2]" />
